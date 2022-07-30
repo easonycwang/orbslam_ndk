@@ -21,9 +21,9 @@
 #include "System.h"
 #include "Converter.h"
 #include <thread>
-#include <pangolin/pangolin.h>
+//#include <pangolin/pangolin.h>
 #include <iomanip>
-#include <openssl/md5.h>
+//#include <openssl/md5.h>
 #include <boost/serialization/base_object.hpp>
 #include <boost/serialization/string.hpp>
 #include <boost/archive/text_iarchive.hpp>
@@ -1508,7 +1508,7 @@ bool System::LoadAtlas(int type)
 string System::CalculateCheckSum(string filename, int type)
 {
     string checksum = "";
-
+#if 0
     unsigned char c[MD5_DIGEST_LENGTH];
 
     std::ios_base::openmode flags = std::ios::in;
@@ -1541,7 +1541,7 @@ string System::CalculateCheckSum(string filename, int type)
         sprintf(aux,"%02x", c[i]);
         checksum = checksum + aux;
     }
-
+#endif
     return checksum;
 }
 

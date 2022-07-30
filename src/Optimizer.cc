@@ -1244,6 +1244,8 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
 
     // Set MapPoint vertices
     const int nExpectedSize = (lLocalKeyFrames.size()+lFixedCameras.size())*lLocalMapPoints.size();
+    std::cout << "LocalBundleAdjustment: lkf: " << lLocalKeyFrames.size() << 
+        " fkf: " << lFixedCameras.size() << " mp: " << lLocalMapPoints.size() << std::endl;
 
     vector<ORB_SLAM3::EdgeSE3ProjectXYZ*> vpEdgesMono;
     vpEdgesMono.reserve(nExpectedSize);
@@ -2523,7 +2525,7 @@ void Optimizer::LocalInertialBA(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int&
         optimizer.setAlgorithm(solver);
     }
 
-
+    std::cout << "LocalInertialBA: " << vpOptimizableKFs.size() << std::endl;
     // Set Local temporal KeyFrame vertices
     N=vpOptimizableKFs.size();
     for(int i=0; i<N; i++)
@@ -3045,6 +3047,7 @@ void Optimizer::InertialOptimization(Map *pMap, Eigen::Matrix3d &Rwg, double &sc
     int its = 200;
     long unsigned int maxKFid = pMap->GetMaxKFid();
     const vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
+    std::cout << "InertialOptimization: " << vpKFs.size() << std::endl;
 
     // Setup optimizer
     g2o::SparseOptimizer optimizer;
@@ -3229,6 +3232,7 @@ void Optimizer::InertialOptimization(Map *pMap, Eigen::Vector3d &bg, Eigen::Vect
     int its = 200; // Check number of iterations
     long unsigned int maxKFid = pMap->GetMaxKFid();
     const vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
+    std::cout << "InertialOptimization: " << vpKFs.size() << std::endl;
 
     // Setup optimizer
     g2o::SparseOptimizer optimizer;
@@ -3391,6 +3395,7 @@ void Optimizer::InertialOptimization(Map *pMap, Eigen::Matrix3d &Rwg, double &sc
     int its = 10;
     long unsigned int maxKFid = pMap->GetMaxKFid();
     const vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
+    std::cout << "InertialOptimization: " << vpKFs.size() << std::endl;
 
     // Setup optimizer
     g2o::SparseOptimizer optimizer;

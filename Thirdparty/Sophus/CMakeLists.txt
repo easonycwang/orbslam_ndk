@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.4)
+cmake_minimum_required(VERSION 3.8)
 project(Sophus VERSION 1.1.0)
 
 include(CMakePackageConfigHelpers)
@@ -32,8 +32,9 @@ ENDIF()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules")
 
 # Find Eigen 3 (dependency)
-find_package(Eigen3 3.3.0 REQUIRED)
-
+#find_package(Eigen3 3.3.0 REQUIRED)
+SET(EIGEN3_INCLUDE_DIR D:/code/eigen-3.4.0)
+set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 # Define interface library target
 add_library(sophus INTERFACE)
 
@@ -97,17 +98,17 @@ target_compile_features (sophus INTERFACE
 add_custom_target(other SOURCES ${SOPHUS_OTHER_FILES})
 
 # Create 'test' make target using ctest
-option(BUILD_TESTS "Build tests." ON)
-if(BUILD_TESTS)
-    enable_testing()
-    add_subdirectory(test)
-endif()
-
-# Create examples make targets using ctest
-option(BUILD_EXAMPLES "Build examples." ON)
-if(BUILD_EXAMPLES)
-    add_subdirectory(examples)
-endif()
+#option(BUILD_TESTS "Build tests." ON)
+#if(BUILD_TESTS)
+#    enable_testing()
+#    add_subdirectory(test)
+#endif()
+#
+## Create examples make targets using ctest
+#option(BUILD_EXAMPLES "Build examples." ON)
+#if(BUILD_EXAMPLES)
+#    add_subdirectory(examples)
+#endif()
 
 # Export package for use from the build tree
 set(SOPHUS_CMAKE_EXPORT_DIR ${CMAKE_INSTALL_DATADIR}/sophus/cmake)

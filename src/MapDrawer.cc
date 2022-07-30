@@ -19,7 +19,7 @@
 #include "MapDrawer.h"
 #include "MapPoint.h"
 #include "KeyFrame.h"
-#include <pangolin/pangolin.h>
+//#include <pangolin/pangolin.h>
 #include <mutex>
 
 namespace ORB_SLAM3
@@ -134,6 +134,7 @@ bool MapDrawer::ParseViewerParamFile(cv::FileStorage &fSettings)
 
 void MapDrawer::DrawMapPoints()
 {
+#if 0
     Map* pActiveMap = mpAtlas->GetCurrentMap();
     if(!pActiveMap)
         return;
@@ -173,10 +174,12 @@ void MapDrawer::DrawMapPoints()
     }
 
     glEnd();
+#endif
 }
 
 void MapDrawer::DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph, const bool bDrawInertialGraph, const bool bDrawOptLba)
 {
+#if 0
     const float &w = mKeyFrameSize;
     const float h = w*0.75;
     const float z = w*0.6;
@@ -393,8 +396,9 @@ void MapDrawer::DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph, const b
             }
         }
     }
+#endif
 }
-
+#if 0
 void MapDrawer::DrawCurrentCamera(pangolin::OpenGlMatrix &Twc)
 {
     const float &w = mCameraSize;
@@ -436,14 +440,14 @@ void MapDrawer::DrawCurrentCamera(pangolin::OpenGlMatrix &Twc)
 
     glPopMatrix();
 }
-
+#endif
 
 void MapDrawer::SetCurrentCameraPose(const Sophus::SE3f &Tcw)
 {
     unique_lock<mutex> lock(mMutexCamera);
     mCameraPose = Tcw.inverse();
 }
-
+#if 0
 void MapDrawer::GetCurrentOpenGLCameraMatrix(pangolin::OpenGlMatrix &M, pangolin::OpenGlMatrix &MOw)
 {
     Eigen::Matrix4f Twc;
@@ -464,4 +468,5 @@ void MapDrawer::GetCurrentOpenGLCameraMatrix(pangolin::OpenGlMatrix &M, pangolin
     MOw.m[13] = Twc(1,3);
     MOw.m[14] = Twc(2,3);
 }
+#endif
 } //namespace ORB_SLAM

@@ -27,6 +27,9 @@
 #include<mutex>
 #include<chrono>
 
+#include <sched.h>
+#include <unistd.h>
+
 namespace ORB_SLAM3
 {
 
@@ -61,18 +64,63 @@ void LocalMapping::SetTracker(Tracking *pTracker)
     mpTracker=pTracker;
 }
 
+////////////////////////////////////////////////////////////////////////
+class Timer {
+public:
+    Timer() {
+        start = std::chrono::high_resolution_clock::now();
+    }
+
+    double Tick() {
+        end = std::chrono::high_resolution_clock::now();
+        auto duration_opt = std::chrono::duration<double, std::milli>(end - start).count();
+        //printf("[%s] time cost = %lf ms\n", func_name, duration_opt);
+        start = std::chrono::high_resolution_clock::now();
+        return duration_opt;
+    }
+
+private:
+    std::chrono::time_point<std::chrono::high_resolution_clock> start;
+    std::chrono::time_point<std::chrono::high_resolution_clock> end;
+};
+
+static int cpu_id = 3;
+static void BindCpu(int core, bool need_log) {
+    cpu_set_t mask;
+    CPU_ZERO(&mask);
+    //CPU_SET(0, &mask);
+    //CPU_SET(1, &mask);
+    //CPU_SET(2, &mask);
+    //CPU_SET(3, &mask);
+    CPU_SET(4, &mask);
+    CPU_SET(5, &mask);
+    CPU_SET(6, &mask);
+    //CPU_SET(7, &mask);
+    //CPU_SET(core, &mask);
+    int ret = sched_setaffinity(0, sizeof(mask), &mask);
+    if (need_log) {
+        printf("wyc bind_cpu core[%d] ret=%d, mask=%x\n", core, ret, mask);
+    }
+}
+static uint32_t frame_id = 0;
+/////////////////////////////////////////////////////////////////////////////////
+
 void LocalMapping::Run()
 {
     mbFinished = false;
-
+    BindCpu(cpu_id, true);
     while(1)
     {
+        BindCpu(cpu_id, false);
         // Tracking will see that Local Mapping is busy
         SetAcceptKeyFrames(false);
 
         // Check if there are keyframes in the queue
         if(CheckNewKeyFrames() && !mbBadImu)
         {
+            printf("[ORBSLAM3] mapping Frame [%d] start!!!\n", frame_id);
+            Timer all_timer;
+            Timer timer_0;
 #ifdef REGISTER_TIMES
             double timeLBA_ms = 0;
             double timeKFCulling_ms = 0;
@@ -81,6 +129,7 @@ void LocalMapping::Run()
 #endif
             // BoW conversion and insertion in Map
             ProcessNewKeyFrame();
+            printf("[ORBSLAM3] Func = ProcessNewKeyFrame, time = %lf\n", timer_0.Tick());
 #ifdef REGISTER_TIMES
             std::chrono::steady_clock::time_point time_EndProcessKF = std::chrono::steady_clock::now();
 
@@ -90,6 +139,7 @@ void LocalMapping::Run()
 
             // Check recent MapPoints
             MapPointCulling();
+            printf("[ORBSLAM3] Func = MapPointCulling, time = %lf\n", timer_0.Tick());
 #ifdef REGISTER_TIMES
             std::chrono::steady_clock::time_point time_EndMPCulling = std::chrono::steady_clock::now();
 
@@ -99,7 +149,7 @@ void LocalMapping::Run()
 
             // Triangulate new MapPoints
             CreateNewMapPoints();
-
+            printf("[ORBSLAM3] Func = CreateNewMapPoints, time = %lf\n", timer_0.Tick());
             mbAbortBA = false;
 
             if(!CheckNewKeyFrames())
@@ -107,6 +157,7 @@ void LocalMapping::Run()
                 // Find more matches in neighbor keyframes and fuse point duplications
                 SearchInNeighbors();
             }
+            printf("[ORBSLAM3] Func = SearchInNeighbors, time = %lf\n", timer_0.Tick());
 
 #ifdef REGISTER_TIMES
             std::chrono::steady_clock::time_point time_EndMPCreation = std::chrono::steady_clock::now();
@@ -125,9 +176,10 @@ void LocalMapping::Run()
             {
                 if(mpAtlas->KeyFramesInMap()>2)
                 {
-
+                    Timer timer_1;
                     if(mbInertial && mpCurrentKeyFrame->GetMap()->isImuInitialized())
                     {
+                        Timer timer_1_1;
                         float dist = (mpCurrentKeyFrame->mPrevKF->GetCameraCenter() - mpCurrentKeyFrame->GetCameraCenter()).norm() +
                                 (mpCurrentKeyFrame->mPrevKF->mPrevKF->GetCameraCenter() - mpCurrentKeyFrame->mPrevKF->GetCameraCenter()).norm();
 
@@ -144,17 +196,19 @@ void LocalMapping::Run()
                                 mbBadImu = true;
                             }
                         }
-
                         bool bLarge = ((mpTracker->GetMatchesInliers()>75)&&mbMonocular)||((mpTracker->GetMatchesInliers()>100)&&!mbMonocular);
                         Optimizer::LocalInertialBA(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA, bLarge, !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
                         b_doneLBA = true;
+                        printf("[ORBSLAM3] Func = LocalInertialBA, time = %lf, cpu_id = %d\n", timer_1_1.Tick(), sched_getcpu());
                     }
                     else
                     {
+                        Timer timer_1_1;
                         Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA);
                         b_doneLBA = true;
+                        printf("[ORBSLAM3] Func = LocalBundleAdjustment, time = %lf, cpu_id = %d\n", timer_1_1.Tick(), sched_getcpu());
                     }
-
+                    printf("[ORBSLAM3] Func = LocalIBA_LocalBA, time = %lf, cpu_id = %d\n", timer_1.Tick(), sched_getcpu());
                 }
 #ifdef REGISTER_TIMES
                 std::chrono::steady_clock::time_point time_EndLBA = std::chrono::steady_clock::now();
@@ -176,19 +230,23 @@ void LocalMapping::Run()
                 }
 
 #endif
-
+                Timer timer_2;
                 // Initialize IMU here
                 if(!mpCurrentKeyFrame->GetMap()->isImuInitialized() && mbInertial)
                 {
+                    Timer timer_2_1;
                     if (mbMonocular)
                         InitializeIMU(1e2, 1e10, true);
                     else
                         InitializeIMU(1e2, 1e5, true);
+                    printf("[ORBSLAM3] Func = InitializeIMU_0, time = %lf, cpu_id = %d\n", timer_2_1.Tick(), sched_getcpu());
+                        
                 }
-
+                printf("[ORBSLAM3] Func = InitializeIMU, time = %lf, cpu_id = %d\n", timer_2.Tick(), sched_getcpu());
 
                 // Check redundant local Keyframes
                 KeyFrameCulling();
+                printf("[ORBSLAM3] Func = KeyFrameCulling, time = %lf, cpu_id = %d\n", timer_2.Tick(), sched_getcpu());
 
 #ifdef REGISTER_TIMES
                 std::chrono::steady_clock::time_point time_EndKFCulling = std::chrono::steady_clock::now();
@@ -204,6 +262,7 @@ void LocalMapping::Run()
                         if(!mpCurrentKeyFrame->GetMap()->GetIniertialBA1()){
                             if (mTinit>5.0f)
                             {
+                                Timer timer_2_1;
                                 cout << "start VIBA 1" << endl;
                                 mpCurrentKeyFrame->GetMap()->SetIniertialBA1();
                                 if (mbMonocular)
@@ -211,11 +270,13 @@ void LocalMapping::Run()
                                 else
                                     InitializeIMU(1.f, 1e5, true);
 
-                                cout << "end VIBA 1" << endl;
+                                cout << "end VIBA 1" <<endl;
+                                printf("[ORBSLAM3] Func = VIBA_1, time = %lf, cpu_id = %d\n", timer_2_1.Tick(), sched_getcpu());
                             }
                         }
                         else if(!mpCurrentKeyFrame->GetMap()->GetIniertialBA2()){
                             if (mTinit>15.0f){
+                                Timer timer_2_1;
                                 cout << "start VIBA 2" << endl;
                                 mpCurrentKeyFrame->GetMap()->SetIniertialBA2();
                                 if (mbMonocular)
@@ -223,7 +284,8 @@ void LocalMapping::Run()
                                 else
                                     InitializeIMU(0.f, 0.f, true);
 
-                                cout << "end VIBA 2" << endl;
+                                cout << "end VIBA 2" <<endl;
+                                printf("[ORBSLAM3] Func = VIBA_2, time = %lf, cpu_id = %d\n", timer_2_1.Tick(), sched_getcpu());
                             }
                         }
 
@@ -240,6 +302,7 @@ void LocalMapping::Run()
                         }
                     }
                 }
+                printf("[ORBSLAM3] Func = VIBA_1_2, time = %lf, cpu_id = %d\n", timer_2.Tick(), sched_getcpu());
             }
 
 #ifdef REGISTER_TIMES
@@ -255,6 +318,9 @@ void LocalMapping::Run()
             double timeLocalMap = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndLocalMap - time_StartProcessKF).count();
             vdLMTotal_ms.push_back(timeLocalMap);
 #endif
+            printf("[ORBSLAM3] Func = timer_0_other, time = %lf\n", timer_0.Tick());
+            printf("[ORBSLAM3] Func = All Frame, time = %lf\n", all_timer.Tick());
+            printf("[ORBSLAM3] mapping Frame [%d] end!!!\n\n", frame_id++);
         }
         else if(Stop() && !mbBadImu)
         {

@@ -254,6 +254,8 @@ void LoadImages(const string &strPathLeft, const string &strPathRight, const str
         getline(fTimes,s);
         if(!s.empty())
         {
+            int pos = s.find('\r');
+            s = s.substr(0, pos);
             stringstream ss;
             ss << s;
             vstrImageLeft.push_back(strPathLeft + "/" + ss.str() + ".png");

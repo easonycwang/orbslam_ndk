@@ -22,7 +22,7 @@
 
 #include <mutex>
 #include <opencv2/core/core.hpp>
-#include <pangolin/pangolin.h>
+//#include <pangolin/pangolin.h>
 #include <string>
 #include"../../../include/System.h"
 
@@ -45,7 +45,7 @@ public:
     float rang;
     //transformation from world to the plane
     cv::Mat Tpw;
-    pangolin::OpenGlMatrix glTpw;
+    //pangolin::OpenGlMatrix glTpw;
     //MapPoints that define the plane
     std::vector<MapPoint*> mvMPs;
     //camera pose when the plane was first observed (to compute normal direction)

@@ -27,8 +27,7 @@
 #include<mutex>
 #include<chrono>
 
-#include <sched.h>
-#include <unistd.h>
+#include "PerfTools.h"
 
 namespace ORB_SLAM3
 {
@@ -64,54 +63,17 @@ void LocalMapping::SetTracker(Tracking *pTracker)
     mpTracker=pTracker;
 }
 
-////////////////////////////////////////////////////////////////////////
-class Timer {
-public:
-    Timer() {
-        start = std::chrono::high_resolution_clock::now();
-    }
-
-    double Tick() {
-        end = std::chrono::high_resolution_clock::now();
-        auto duration_opt = std::chrono::duration<double, std::milli>(end - start).count();
-        //printf("[%s] time cost = %lf ms\n", func_name, duration_opt);
-        start = std::chrono::high_resolution_clock::now();
-        return duration_opt;
-    }
-
-private:
-    std::chrono::time_point<std::chrono::high_resolution_clock> start;
-    std::chrono::time_point<std::chrono::high_resolution_clock> end;
-};
-
-static int cpu_id = 3;
-static void BindCpu(int core, bool need_log) {
-    cpu_set_t mask;
-    CPU_ZERO(&mask);
-    //CPU_SET(0, &mask);
-    //CPU_SET(1, &mask);
-    //CPU_SET(2, &mask);
-    //CPU_SET(3, &mask);
-    CPU_SET(4, &mask);
-    CPU_SET(5, &mask);
-    CPU_SET(6, &mask);
-    //CPU_SET(7, &mask);
-    //CPU_SET(core, &mask);
-    int ret = sched_setaffinity(0, sizeof(mask), &mask);
-    if (need_log) {
-        printf("wyc bind_cpu core[%d] ret=%d, mask=%x\n", core, ret, mask);
-    }
-}
+/////////////////////////////////////////////////////////////////////////////////
 static uint32_t frame_id = 0;
 /////////////////////////////////////////////////////////////////////////////////
 
 void LocalMapping::Run()
 {
     mbFinished = false;
-    BindCpu(cpu_id, true);
+    //BindCpu(0x02, true);
     while(1)
     {
-        BindCpu(cpu_id, false);
+        BindCpu(0x20, false);
         // Tracking will see that Local Mapping is busy
         SetAcceptKeyFrames(false);
 

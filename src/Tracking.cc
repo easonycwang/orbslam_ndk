@@ -34,6 +34,7 @@
 #include <mutex>
 #include <chrono>
 
+#include "PerfTools.h"
 
 using namespace std;
 
@@ -1449,10 +1450,14 @@ bool Tracking::GetStepByStep()
     return bStepByStep;
 }
 
-
+static uint32_t frame_id = 0;
 
 Sophus::SE3f Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, const double &timestamp, string filename)
 {
+    BindCpu(0x02, false);
+    Timer timer_all;
+    printf("[ORBSLAM3_Tracking] tracking Frame [%d] start!!! cpu_id = %d\n", frame_id, sched_getcpu());
+    Timer timer;
     //cout << "GrabImageStereo" << endl;
 
     mImGray = imRectLeft;
@@ -1488,6 +1493,8 @@ Sophus::SE3f Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat 
         }
     }
 
+    printf("[ORBSLAM3_Tracking] Func = GrabImageStereo_cvtColor, time = %lf\n", timer.Tick());
+
     //cout << "Incoming frame creation" << endl;
 
     if (mSensor == System::STEREO && !mpCamera2)
@@ -1508,11 +1515,13 @@ Sophus::SE3f Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat 
     vdORBExtract_ms.push_back(mCurrentFrame.mTimeORB_Ext);
     vdStereoMatch_ms.push_back(mCurrentFrame.mTimeStereoMatch);
 #endif
-
+    printf("[ORBSLAM3_Tracking] Func = new_frame, time = %lf\n", timer.Tick());
     //cout << "Tracking start" << endl;
     Track();
     //cout << "Tracking end" << endl;
-
+    printf("[ORBSLAM3_Tracking] Func = Track, time = %lf\n", timer.Tick());
+    printf("[ORBSLAM3_Tracking] tracking Frame [%d] end!!! cpu_id = %d, cost = %lf\n",
+        frame_id++, sched_getcpu(), timer_all.Tick());
     return mCurrentFrame.GetPose();
 }
 
@@ -1793,7 +1802,7 @@ void Tracking::ResetFrameIMU()
 
 void Tracking::Track()
 {
-
+    Timer timer;
     if (bStepByStep)
     {
         std::cout << "Tracking: Waiting to the next step" << std::endl;
@@ -1865,13 +1874,15 @@ void Tracking::Track()
     }
 
     mLastProcessedState=mState;
-
+    printf("[ORBSLAM3_Tracking] Func = Track_0, time = %lf\n", timer.Tick());
     if ((mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD) && !mbCreatedMap)
     {
 #ifdef REGISTER_TIMES
         std::chrono::steady_clock::time_point time_StartPreIMU = std::chrono::steady_clock::now();
 #endif
+        Timer timer_0;
         PreintegrateIMU();
+        printf("[ORBSLAM3_Tracking] Func = PreintegrateIMU_inter, time = %lf\n", timer_0.Tick());
 #ifdef REGISTER_TIMES
         std::chrono::steady_clock::time_point time_EndPreIMU = std::chrono::steady_clock::now();
 
@@ -1882,8 +1893,12 @@ void Tracking::Track()
     }
     mbCreatedMap = false;
 
+    printf("[ORBSLAM3_Tracking] Func = PreintegrateIMU, time = %lf\n", timer.Tick());
+
     // Get Map Mutex -> Map cannot be changed
     unique_lock<mutex> lock(pCurrentMap->mMutexMapUpdate);
+
+    printf("[ORBSLAM3_Tracking] Func = map_mutex_lock, time = %lf\n", timer.Tick());
 
     mbMapUpdated = false;
 
@@ -1900,7 +1915,9 @@ void Tracking::Track()
     {
         if(mSensor==System::STEREO || mSensor==System::RGBD || mSensor==System::IMU_STEREO || mSensor==System::IMU_RGBD)
         {
+            Timer timer;
             StereoInitialization();
+            printf("[ORBSLAM3_Tracking] Func = StereoInitialization, time = %lf\n", timer.Tick());
         }
         else
         {
@@ -1938,23 +1955,26 @@ void Tracking::Track()
             // you explicitly activate the "only tracking" mode.
             if(mState==OK)
             {
-
+                Timer timer1;
                 // Local Mapping might have changed some MapPoints tracked in last frame
                 CheckReplacedInLastFrame();
-
                 if((!mbVelocity && !pCurrentMap->isImuInitialized()) || mCurrentFrame.mnId<mnLastRelocFrameId+2)
                 {
+                    Timer timer;
                     Verbose::PrintMess("TRACK: Track with respect to the reference KF ", Verbose::VERBOSITY_DEBUG);
                     bOK = TrackReferenceKeyFrame();
+                    printf("[ORBSLAM3_Tracking] Func = TrackReferenceKeyFrame, time = %lf, bOk = %d\n", timer.Tick(), bOK);
                 }
                 else
                 {
+                    Timer timer;
                     Verbose::PrintMess("TRACK: Track with motion model", Verbose::VERBOSITY_DEBUG);
                     bOK = TrackWithMotionModel();
+                    printf("[ORBSLAM3_Tracking] Func = TrackWithMotionModel, time = %lf, bOk = %d\n", timer.Tick(), bOK);
                     if(!bOK)
                         bOK = TrackReferenceKeyFrame();
                 }
-
+                printf("[ORBSLAM3_Tracking] Func = Track_OK, time = %lf\n", timer1.Tick());
 
                 if (!bOK)
                 {
@@ -1977,7 +1997,7 @@ void Tracking::Track()
             }
             else
             {
-
+                Timer timer1;
                 if (mState == RECENTLY_LOST)
                 {
                     Verbose::PrintMess("Lost for a short time", Verbose::VERBOSITY_NORMAL);
@@ -1985,8 +2005,11 @@ void Tracking::Track()
                     bOK = true;
                     if((mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD))
                     {
-                        if(pCurrentMap->isImuInitialized())
+                        if(pCurrentMap->isImuInitialized()) {
+                            Timer timer;
                             PredictStateIMU();
+                            printf("[ORBSLAM3_Tracking] Func = PredictStateIMU, time = %lf\n", timer.Tick());
+                        }
                         else
                             bOK = false;
 
@@ -1999,8 +2022,10 @@ void Tracking::Track()
                     }
                     else
                     {
+                        Timer timer;
                         // Relocalization
                         bOK = Relocalization();
+                        printf("[ORBSLAM3_Tracking] Func = Relocalization, time = %lf\n", timer.Tick());
                         //std::cout << "mCurrentFrame.mTimeStamp:" << to_string(mCurrentFrame.mTimeStamp) << std::endl;
                         //std::cout << "mTimeStampLost:" << to_string(mTimeStampLost) << std::endl;
                         if(mCurrentFrame.mTimeStamp-mTimeStampLost>3.0f && !bOK)
@@ -2030,6 +2055,7 @@ void Tracking::Track()
 
                     return;
                 }
+                printf("[ORBSLAM3_Tracking] Func = Track_LOST, time = %lf\n", timer1.Tick());
             }
 
         }
@@ -2124,7 +2150,9 @@ void Tracking::Track()
         {
             if(bOK)
             {
+                Timer timer;
                 bOK = TrackLocalMap();
+                printf("[ORBSLAM3_Tracking] Func = TrackLocalMap, time = %lf\n", timer.Tick());
 
             }
             if(!bOK)
@@ -2139,6 +2167,7 @@ void Tracking::Track()
                 bOK = TrackLocalMap();
         }
 
+        Timer timer2;
         if(bOK)
             mState = OK;
         else if (mState == OK)
@@ -2162,6 +2191,7 @@ void Tracking::Track()
                 mTimeStampLost = mCurrentFrame.mTimeStamp;
             //}
         }
+        printf("[ORBSLAM3_Tracking] Func = ResetActiveMap, time = %lf\n", timer2.Tick());
 
         // Save frame if recent relocalization, since they are used for IMU reset (as we are making copy, it shluld be once mCurrFrame is completely modified)
         if((mCurrentFrame.mnId<(mnLastRelocFrameId+mnFramesToResetIMU)) && (mCurrentFrame.mnId > mnFramesToResetIMU) &&
@@ -2175,6 +2205,7 @@ void Tracking::Track()
             // Load preintegration
             pF->mpImuPreintegratedFrame = new IMU::Preintegrated(mCurrentFrame.mpImuPreintegratedFrame);
         }
+        printf("[ORBSLAM3_Tracking] Func = recent_relocalization, time = %lf\n", timer2.Tick());
 
         if(pCurrentMap->isImuInitialized())
         {
@@ -2189,6 +2220,7 @@ void Tracking::Track()
                     mLastBias = mCurrentFrame.mImuBias;
             }
         }
+        printf("[ORBSLAM3_Tracking] Func = ResetFrameIMU, time = %lf\n", timer2.Tick());
 
 #ifdef REGISTER_TIMES
         std::chrono::steady_clock::time_point time_EndLMTrack = std::chrono::steady_clock::now();
@@ -2241,13 +2273,18 @@ void Tracking::Track()
 #ifdef REGISTER_TIMES
             std::chrono::steady_clock::time_point time_StartNewKF = std::chrono::steady_clock::now();
 #endif
+            Timer timer;
             bool bNeedKF = NeedNewKeyFrame();
+            printf("[ORBSLAM3_Tracking] Func = NeedNewKeyFrame, time = %lf\n", timer.Tick());
 
             // Check if we need to insert a new keyframe
             // if(bNeedKF && bOK)
             if(bNeedKF && (bOK || (mInsertKFsLost && mState==RECENTLY_LOST &&
-                                   (mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD))))
+                                   (mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)))) {
+                Timer timer;
                 CreateNewKeyFrame();
+                printf("[ORBSLAM3_Tracking] Func = CreateNewKeyFrame, time = %lf\n", timer.Tick());
+            }
 
 #ifdef REGISTER_TIMES
             std::chrono::steady_clock::time_point time_EndNewKF = std::chrono::steady_clock::now();
@@ -2266,6 +2303,7 @@ void Tracking::Track()
                     mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);
             }
         }
+        printf("[ORBSLAM3_Tracking] Func = NeedNewKeyFrame_CreateNewKeyFrame, time = %lf\n", timer2.Tick());
 
         // Reset if the camera get lost soon after initialization
         if(mState==LOST)
@@ -2948,7 +2986,7 @@ bool Tracking::TrackWithMotionModel()
 
 bool Tracking::TrackLocalMap()
 {
-
+    Timer timer;
     // We have an estimation of the camera pose and some map points tracked in the frame.
     // We retrieve the local map and try to find matches to points in the local map.
     mTrackedFr++;
@@ -2966,31 +3004,44 @@ bool Tracking::TrackLocalMap()
                 aux2++;
         }
 
+    printf("[ORBSLAM3_Tracking] Func = TrackLocalMap_0, time = %lf\n", timer.Tick());
+
     int inliers;
-    if (!mpAtlas->isImuInitialized())
+    if (!mpAtlas->isImuInitialized()) {
+        Timer timer0;
         Optimizer::PoseOptimization(&mCurrentFrame);
+        printf("[ORBSLAM3_Tracking] Func = PoseOptimization, time = %lf\n", timer0.Tick());
+    }
     else
     {
         if(mCurrentFrame.mnId<=mnLastRelocFrameId+mnFramesToResetIMU)
         {
+            Timer timer0;
             Verbose::PrintMess("TLM: PoseOptimization ", Verbose::VERBOSITY_DEBUG);
             Optimizer::PoseOptimization(&mCurrentFrame);
+            printf("[ORBSLAM3_Tracking] Func = PoseOptimization, time = %lf\n", timer0.Tick());
         }
         else
         {
             // if(!mbMapUpdated && mState == OK) //  && (mnMatchesInliers>30))
             if(!mbMapUpdated) //  && (mnMatchesInliers>30))
             {
+                Timer timer0;
                 Verbose::PrintMess("TLM: PoseInertialOptimizationLastFrame ", Verbose::VERBOSITY_DEBUG);
                 inliers = Optimizer::PoseInertialOptimizationLastFrame(&mCurrentFrame); // , !mpLastKeyFrame->GetMap()->GetIniertialBA1());
+                printf("[ORBSLAM3_Tracking] Func = PoseInertialOptimizationLastFrame, time = %lf\n", timer0.Tick());
             }
             else
             {
+                Timer timer0;
                 Verbose::PrintMess("TLM: PoseInertialOptimizationLastKeyFrame ", Verbose::VERBOSITY_DEBUG);
                 inliers = Optimizer::PoseInertialOptimizationLastKeyFrame(&mCurrentFrame); // , !mpLastKeyFrame->GetMap()->GetIniertialBA1());
+                printf("[ORBSLAM3_Tracking] Func = PoseInertialOptimizationLastKeyFrame, time = %lf\n", timer0.Tick());
             }
         }
     }
+
+    printf("[ORBSLAM3_Tracking] Func = TrackLocalMap_1, time = %lf\n", timer.Tick());
 
     aux1 = 0, aux2 = 0;
     for(int i=0; i<mCurrentFrame.N; i++)
@@ -3059,6 +3110,8 @@ bool Tracking::TrackLocalMap()
         else
             return true;
     }
+
+    printf("[ORBSLAM3_Tracking] Func = TrackLocalMap_3, time = %lf\n", timer.Tick());
 }
 
 bool Tracking::NeedNewKeyFrame()
